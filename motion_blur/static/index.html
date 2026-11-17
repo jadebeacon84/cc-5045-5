@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快门采样运动模糊出图面板</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1>快速机械运动 · 时间采样运动模糊渲染器</h1>
+  <p class="sub">每个曝光时刻由连续时间场景独立求值，经工作进程光栅化后按快门权重积分；非锐利图加方向模糊。</p>
+</header>
+
+<main>
+<section class="panel" id="control-panel">
+  <h2>快门采样出图任务</h2>
+
+  <div id="error-banner" class="error-banner" hidden></div>
+
+  <div class="grid">
+    <label>帧率 fps
+      <input type="number" id="fps" value="24" min="1" step="1">
+    </label>
+    <label>快门角度（度）
+      <input type="number" id="shutter_angle" value="180" min="1" max="360" step="1">
+    </label>
+    <label>时间样本数
+      <input type="number" id="samples" value="24" min="1" max="400" step="1">
+    </label>
+    <label>高密度参考样本数
+      <input type="number" id="reference_samples" value="256" min="8" max="2048" step="8">
+    </label>
+    <label>快门曲线
+      <select id="curve"></select>
+    </label>
+    <label>工作进程数
+      <input type="number" id="workers" value="4" min="1" max="16" step="1">
+    </label>
+    <label>宽度 px
+      <input type="number" id="width" value="400" min="64" max="1920" step="8">
+    </label>
+    <label>高度 px
+      <input type="number" id="height" value="300" min="64" max="1080" step="8">
+    </label>
+    <label>重试上限
+      <input type="number" id="max_retries" value="2" min="0" max="5" step="1">
+    </label>
+    <label class="span2">注入首次故障的样本序号（逗号分隔，留空关闭）
+      <input type="text" id="fail_indices" placeholder="例如 3,7">
+    </label>
+    <label class="span2">注入重复投递的样本序号（验证去重，逗号分隔）
+      <input type="text" id="duplicate_indices" placeholder="例如 5">
+    </label>
+  </div>
+
+  <div class="range-info" id="range-info"></div>
+  <div class="actions">
+    <button id="render-btn">开始出图</button>
+    <span id="job-status" class="job-status"></span>
+  </div>
+
+  <h3>采样权重（实际归一化结果）</h3>
+  <div id="weight-chart" class="weight-chart"></div>
+  <p class="hint">横轴为快门开启区间内的归一化位置，纵轴为该时刻的积分权重；区间随帧率与快门角度实时变化。</p>
+</section>
+
+<section class="panel" id="result-panel" hidden>
+  <h2>结果区</h2>
+  <div class="metrics" id="metrics"></div>
+  <div class="merge-report" id="merge-report"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="integral">运动模糊积分图</button>
+    <button class="tab" data-tab="reference">高密度时间参考</button>
+    <button class="tab" data-tab="error">误差图（×4 增益）</button>
+    <button class="tab" data-tab="states">曝光内单个状态</button>
+  </div>
+
+  <div class="tab-body" data-body="integral">
+    <img id="img-integral" alt="运动模糊积分图">
+  </div>
+  <div class="tab-body" data-body="reference" hidden>
+    <img id="img-reference" alt="高密度参考图">
+  </div>
+  <div class="tab-body" data-body="error" hidden>
+    <img id="img-error" alt="逐像素误差图">
+  </div>
+  <div class="tab-body" data-body="states" hidden>
+    <div class="state-controls">
+      <label>选择曝光时刻样本
+        <select id="state-select"></select>
+      </label>
+      <div id="state-meta"></div>
+    </div>
+    <img id="img-state" alt="单时刻锐利状态">
+  </div>
+</section>
+
+<section class="panel docs">
+  <h2>时间一致性支持范围</h2>
+  <ul>
+    <li><strong>透明物体：</strong>前景半透明遮挡条参与每一个时间样本的 source-over 合成，叶片与小球在不同时刻从其后穿过，轮廓重叠与颜色混合随时间正确变化。</li>
+    <li><strong>光照随时间变化：</strong>光照增益以 8 Hz 闪烁、方向连续旋转、环境强度缓慢起伏；背景与所有物体在同一时刻共享同一光照状态，积分结果含真实的时变光照平均。</li>
+    <li><strong>当前边界：</strong>折射与焦散未建模（透明物体只做 alpha 混合，不弯折背景）；光源为解析方向光，不含阴影与全局光照；运动限于二维平面，无运动矢量外推——所有遮挡变化都来自逐时刻真实求值。</li>
+  </ul>
+</section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

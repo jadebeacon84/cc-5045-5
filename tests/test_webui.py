@@ -1,0 +1,78 @@
+import json
+import threading
+import unittest
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+
+from motion_blur.webui import Handler
+
+
+class WebPanelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        cls.port = cls.server.server_address[1]
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def _get(self, path):
+        return urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}", timeout=10)
+
+    def _post(self, payload):
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/render",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def test_curves_and_static(self):
+        with self._get("/api/curves") as resp:
+            curves = json.loads(resp.read())["curves"]
+        self.assertIn("trapezoid", curves)
+        with self._get("/") as resp:
+            self.assertEqual(resp.status, 200)
+
+    def test_schedule_reflects_angle_and_fps(self):
+        with self._get("/api/schedule?fps=60&angle=90&samples=8&curve=box") as resp:
+            data = json.loads(resp.read())
+        self.assertAlmostEqual(data["exposure"], 1.0 / 60 * 0.25, places=12)
+        self.assertEqual(len(data["times"]), 8)
+
+    def test_invalid_render_payload_rejected(self):
+        code, body = self._post({
+            "fps": -1, "shutter_angle": 180, "samples": 8, "curve": "box",
+            "width": 80, "height": 60, "workers": 1,
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("帧率", body["error"])
+
+    def test_unknown_curve_rejected(self):
+        code, body = self._post({
+            "fps": 24, "shutter_angle": 180, "samples": 8, "curve": "nope",
+            "width": 80, "height": 60, "workers": 1,
+        })
+        self.assertEqual(code, 400)
+
+    def test_traversal_blocked_and_missing_404(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._get("/jobs/..%2f..%2fetc%2fpasswd")
+        self.assertEqual(ctx.exception.code, 403)
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._get("/jobs/does-not-exist/x.png")
+        self.assertEqual(ctx.exception.code, 404)
+
+
+if __name__ == "__main__":
+    unittest.main()
