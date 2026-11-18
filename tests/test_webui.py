@@ -50,6 +50,50 @@ class WebPanelTests(unittest.TestCase):
         self.assertAlmostEqual(data["exposure"], 1.0 / 60 * 0.25, places=12)
         self.assertEqual(len(data["times"]), 8)
 
+    def test_schedule_absolute_time_uses_frame_index(self):
+        T = 1.0 / 24.0
+        url = (
+            "/api/schedule?fps=24&angle=90&samples=8&curve=box"
+            f"&frame_index=3&t_open_offset={0.7 * T}"
+        )
+        with self._get(url) as resp:
+            data = json.loads(resp.read())
+        self.assertEqual(data["frame_index"], 3)
+        self.assertAlmostEqual(data["frame_start"], 3 * T, places=12)
+        self.assertAlmostEqual(data["t_open"], 3 * T + 0.7 * T, places=12)
+        self.assertGreater(data["times"][0], 3 * T)
+        self.assertEqual(len(data["frame_times"]), 8)
+
+    def test_schedule_cross_frame_rejected_with_400(self):
+        T = 1.0 / 24.0
+        url = (
+            "/api/schedule?fps=24&angle=180&samples=8&curve=box"
+            f"&t_open_offset={0.6 * T}"
+        )
+        import urllib.error
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._get(url)
+        self.assertEqual(ctx.exception.code, 400)
+        self.assertIn("帧边界", json.loads(ctx.exception.read())["error"])
+
+    def test_render_accepts_frame_mapping(self):
+        T = 1.0 / 24.0
+        code, body = self._post({
+            "fps": 24, "shutter_angle": 90, "samples": 6, "curve": "box",
+            "width": 80, "height": 60, "workers": 1,
+            "frame_index": 2, "t_open_offset": 0.5 * T,
+        })
+        self.assertEqual(code, 200)
+        self.assertEqual(body["status"], "running")
+
+    def test_render_negative_frame_rejected(self):
+        code, body = self._post({
+            "fps": 24, "shutter_angle": 180, "samples": 8, "curve": "box",
+            "width": 80, "height": 60, "workers": 1, "frame_index": -1,
+        })
+        self.assertEqual(code, 400)
+        self.assertIn("帧号", body["error"])
+
     def test_invalid_render_payload_rejected(self):
         code, body = self._post({
             "fps": -1, "shutter_angle": 180, "samples": 8, "curve": "box",

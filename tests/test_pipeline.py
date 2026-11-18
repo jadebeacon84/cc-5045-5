@@ -94,6 +94,41 @@ class PipelineTests(unittest.TestCase):
             fine = run_job(self._base_cfg(samples=48), d2)
             self.assertLess(fine["error"]["mean_abs"], coarse["error"]["mean_abs"])
 
+    def test_asymmetric_shutter_job_uses_absolute_frame_time(self):
+        # 非对称快门 + 非零帧号：元数据必须记录绝对时间映射，且渲染产物
+        # 与帧 0 的同形快门不同（证明像素来自修补后的绝对时间，而非默认值）。
+        T = 1.0 / 24.0
+        kw = dict(shutter_angle=90.0, t_open_offset=0.7 * T, frame_index=3)
+        with tempfile.TemporaryDirectory() as d0, tempfile.TemporaryDirectory() as d3:
+            base = self._base_cfg()
+            cfg3 = self._base_cfg(**kw)
+            cfg0 = self._base_cfg(shutter_angle=90.0, t_open_offset=0.7 * T, frame_index=0)
+            meta3 = run_job(cfg3, d3)
+            meta0 = run_job(cfg0, d0)
+            sch = meta3["schedule"]
+            self.assertEqual(sch["frame_index"], 3)
+            self.assertAlmostEqual(sch["frame_start"], 3 * T, places=12)
+            self.assertGreater(sch["times"][0], 3 * T)
+            # frame_times 与帧 0 一致，绝对 times 整体平移一个帧起点
+            self.assertEqual(len(sch["frame_times"]), len(meta0["schedule"]["frame_times"]))
+            for t3, t0 in zip(sch["times"], meta0["schedule"]["times"]):
+                self.assertAlmostEqual(t3 - t0, 3 * T, places=12)
+            # 产物随绝对时间变化
+            import os
+            self.assertTrue(os.path.exists(os.path.join(d3, "integral.png")))
+            with open(os.path.join(d3, "integral.png"), "rb") as f3, \
+                    open(os.path.join(d0, "integral.png"), "rb") as f0:
+                self.assertNotEqual(f3.read(), f0.read())
+            # 参考与积分使用同一绝对时间区间，误差仍处于收敛量级
+            self.assertLess(meta3["error"]["mean_abs"], 0.01)
+
+    def test_cross_frame_offset_rejected_end_to_end(self):
+        T = 1.0 / 24.0
+        with tempfile.TemporaryDirectory() as d:
+            cfg = self._base_cfg(t_open_offset=0.6 * T, shutter_angle=180.0)
+            with self.assertRaises(ValueError):
+                run_job(cfg, d)
+
 
 if __name__ == "__main__":
     unittest.main()

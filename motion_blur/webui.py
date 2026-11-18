@@ -66,6 +66,14 @@ def _validate(payload: dict) -> JobConfig:
         raise ValueError(f"未知快门曲线: {payload['curve']!r}")
     if int(payload["width"]) * int(payload["height"]) > 1_600_000:
         raise ValueError("分辨率过大（上限约 160 万像素），请调小后重试")
+    frame_index = int(payload.get("frame_index", 0))
+    if frame_index < 0:
+        raise ValueError(f"帧号必须是 >=0 的整数，收到: {frame_index}")
+    t_open_offset = float(payload.get("t_open_offset", 0.0))
+    if t_open_offset < 0:
+        raise ValueError(
+            f"帧内快门开启偏移必须为非负数（秒），收到: {t_open_offset}"
+        )
 
     def _indices(name):
         raw = payload.get(name, [])
@@ -88,6 +96,8 @@ def _validate(payload: dict) -> JobConfig:
         workers=int(payload["workers"]),
         max_retries=int(payload.get("max_retries", 2)),
         reference_samples=int(payload.get("reference_samples", 256)),
+        frame_index=frame_index,
+        t_open_offset=t_open_offset,
         fail_indices=tuple(_indices("fail_indices")),
         duplicate_indices=tuple(_indices("duplicate_indices")),
     )
@@ -141,13 +151,19 @@ class Handler(BaseHTTPRequestHandler):
                     float(q.get("angle", "180")),
                     int(q.get("samples", "24")),
                     q.get("curve", "trapezoid"),
+                    t_open_offset=float(q.get("t_open_offset", "0")),
+                    frame_index=int(q.get("frame_index", "0")),
                 )
                 return self._send_json({
+                    "frame_index": sched.frame_index,
                     "frame_period": sched.frame_period,
+                    "frame_start": sched.frame_start,
                     "t_open": sched.t_open,
                     "t_close": sched.t_close,
+                    "t_open_offset": sched.t_open_offset,
                     "exposure": sched.exposure,
                     "times": sched.times,
+                    "frame_times": sched.frame_times,
                     "weights": sched.weights,
                     "positions": [s.position for s in sched.samples],
                 })

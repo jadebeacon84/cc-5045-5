@@ -9,6 +9,7 @@
   --accent-2: #7ed0a8;
   --error: #ff6b6b;
   --warn: #ffc857;
+  --edge: #c792ea;
 }
 
 * { box-sizing: border-box; }
@@ -80,6 +81,8 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
   color: var(--accent-2);
   font-size: 13px;
 }
+.range-info .bad { color: var(--error); font-weight: 600; }
+.range-info .ok { color: var(--accent-2); font-weight: 600; }
 
 .actions { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
 button {
@@ -124,6 +127,7 @@ button:disabled { opacity: 0.55; cursor: wait; }
 }
 .weight-bar.missing { background: var(--error); }
 .weight-bar.duplicate { background: var(--warn); }
+.weight-bar.edge { background: linear-gradient(180deg, var(--edge), #6a3fa0); }
 .weight-bar:hover::after {
   content: attr(data-tip);
   position: absolute;

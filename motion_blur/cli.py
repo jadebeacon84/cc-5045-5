@@ -16,20 +16,31 @@ from .shutter import CURVE_LABELS, SHUTTER_CURVES, build_schedule
 
 
 def _cmd_schedule(args: argparse.Namespace) -> int:
-    sched = build_schedule(args.fps, args.angle, args.samples, args.curve)
+    sched = build_schedule(
+        args.fps,
+        args.angle,
+        args.samples,
+        args.curve,
+        t_open_offset=args.t_open_offset,
+        frame_index=args.frame,
+    )
     payload = {
         "fps": sched.fps,
         "shutter_angle": sched.shutter_angle,
         "curve": sched.curve,
         "curve_label": CURVE_LABELS[sched.curve],
+        "frame_index": sched.frame_index,
         "frame_period": sched.frame_period,
+        "frame_start": sched.frame_start,
         "t_open": sched.t_open,
         "t_close": sched.t_close,
+        "t_open_offset": sched.t_open_offset,
         "exposure": sched.exposure,
         "samples": [
             {
                 "index": s.index,
                 "time": s.time,
+                "frame_time": s.frame_time,
                 "position": s.position,
                 "weight": s.weight,
                 "raw_weight": s.raw_weight,
@@ -52,6 +63,8 @@ def _cmd_render(args: argparse.Namespace) -> int:
         workers=args.workers,
         max_retries=args.max_retries,
         reference_samples=args.reference_samples,
+        frame_index=args.frame,
+        t_open_offset=args.t_open_offset,
         fail_indices=_parse_indices(args.fail),
         duplicate_indices=_parse_indices(args.duplicate),
     )
@@ -94,6 +107,13 @@ def build_parser() -> argparse.ArgumentParser:
     p1.add_argument("--angle", type=float, default=180.0, help="快门角度（度）")
     p1.add_argument("--samples", type=int, default=24)
     p1.add_argument("--curve", choices=sorted(SHUTTER_CURVES), default="trapezoid")
+    p1.add_argument("--frame", type=int, default=0, help="帧号（>=0 的整数）")
+    p1.add_argument(
+        "--t-open-offset",
+        type=float,
+        default=0.0,
+        help="快门在本帧内的开启偏移（秒，相对帧起点）",
+    )
     p1.set_defaults(func=_cmd_schedule)
 
     p2 = sub.add_parser("render", help="执行一次完整离线渲染任务")
@@ -107,6 +127,13 @@ def build_parser() -> argparse.ArgumentParser:
     p2.add_argument("--workers", type=int, default=4)
     p2.add_argument("--max-retries", type=int, default=2)
     p2.add_argument("--reference-samples", type=int, default=256)
+    p2.add_argument("--frame", type=int, default=0, help="帧号（>=0 的整数）")
+    p2.add_argument(
+        "--t-open-offset",
+        type=float,
+        default=0.0,
+        help="快门在本帧内的开启偏移（秒，相对帧起点）",
+    )
     p2.add_argument("--fail", default="", help="注入首次故障的样本序号，逗号分隔，如 3,7")
     p2.add_argument("--duplicate", default="", help="注入重复投递的样本序号，逗号分隔")
     p2.set_defaults(func=_cmd_render)

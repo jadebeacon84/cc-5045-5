@@ -43,6 +43,8 @@ class JobConfig:
     workers: int = 4
     max_retries: int = 2
     reference_samples: int = 256
+    frame_index: int = 0
+    t_open_offset: float = 0.0
     fail_indices: Sequence[int] = ()      # 首次执行注入故障的样本
     duplicate_indices: Sequence[int] = ()  # 额外重复投递的样本
 
@@ -124,10 +126,20 @@ def run_job(cfg: JobConfig, out_dir: str) -> dict:
     os.makedirs(samples_dir, exist_ok=True)
 
     schedule = build_schedule(
-        cfg.fps, cfg.shutter_angle, cfg.samples, cfg.curve
+        cfg.fps,
+        cfg.shutter_angle,
+        cfg.samples,
+        cfg.curve,
+        t_open_offset=cfg.t_open_offset,
+        frame_index=cfg.frame_index,
     )
     ref_schedule = build_schedule(
-        cfg.fps, cfg.shutter_angle, cfg.reference_samples, cfg.curve
+        cfg.fps,
+        cfg.shutter_angle,
+        cfg.reference_samples,
+        cfg.curve,
+        t_open_offset=cfg.t_open_offset,
+        frame_index=cfg.frame_index,
     )
 
     tasks = _build_tasks(schedule, cfg)
@@ -184,15 +196,21 @@ def run_job(cfg: JobConfig, out_dir: str) -> dict:
             "workers": cfg.workers,
             "max_retries": cfg.max_retries,
             "reference_samples": cfg.reference_samples,
+            "frame_index": cfg.frame_index,
+            "t_open_offset": cfg.t_open_offset,
             "fail_indices": list(cfg.fail_indices),
             "duplicate_indices": list(cfg.duplicate_indices),
         },
         "schedule": {
+            "frame_index": schedule.frame_index,
             "frame_period": schedule.frame_period,
+            "frame_start": schedule.frame_start,
             "t_open": schedule.t_open,
             "t_close": schedule.t_close,
+            "t_open_offset": schedule.t_open_offset,
             "exposure": schedule.exposure,
             "times": schedule.times,
+            "frame_times": schedule.frame_times,
             "weights": schedule.weights,
             "positions": [s.position for s in schedule.samples],
         },
